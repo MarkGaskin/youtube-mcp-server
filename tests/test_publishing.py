@@ -166,6 +166,47 @@ class TestUpdateVideo:
         assert "error" in result
         mock_yt.videos().update.assert_not_called()
 
+    @patch("youtube_mcp.tools.publishing.auth")
+    @patch("youtube_mcp.tools.publishing.quota")
+    def test_update_without_privacy_status_does_not_raise_keyerror(
+        self, mock_quota, mock_auth
+    ):
+        """Regression: when privacy_status/publish_at/made_for_kids are all
+        omitted, only part='snippet' is sent and the YouTube API response
+        omits the 'status' field. The function must not raise KeyError.
+        """
+        from youtube_mcp.tools.publishing import youtube_update_video
+
+        mock_yt = MagicMock()
+        mock_auth.build_youtube_service.return_value = mock_yt
+
+        mock_yt.videos().list().execute.return_value = {
+            "items": [{
+                "id": "vid1",
+                "snippet": {
+                    "title": "Old Title",
+                    "description": "Desc",
+                    "tags": ["tag1"],
+                    "categoryId": "22",
+                },
+                "status": {"privacyStatus": "public"},
+            }]
+        }
+
+        mock_yt.videos().update().execute.return_value = {
+            "kind": "youtube#video",
+            "etag": "abc",
+            "id": "vid1",
+            "snippet": {"title": "New Title"},
+        }
+
+        result = youtube_update_video(video_id="vid1", title="New Title")
+        assert result["id"] == "vid1"
+        assert result["title"] == "New Title"
+        assert result["updated"] is True
+        assert result.get("privacy") is None
+        assert result.get("publish_at") is None
+
 
 class TestSetThumbnail:
     @patch("youtube_mcp.tools.publishing.MediaFileUpload")
